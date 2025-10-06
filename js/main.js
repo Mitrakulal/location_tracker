@@ -241,33 +241,33 @@ function clearAllRouteData() {
 
 // Clean up any existing routes that might contain default coordinates
 function cleanupExistingRoutes() {
-    // Clean the data properly, removing all default coordinates
+    // Force clear ALL data if any contains Mysore coordinates
+    let foundBadData = false;
+    
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.match(/^\d{4}-\d{2}-\d{2}$/)) { // Date format key
             const originalData = localStorage.getItem(key);
             if (originalData) {
                 const data = JSON.parse(originalData);
-                // Filter out bad coordinates more strictly
-                const cleanData = data.filter(point => {
+                // Check if any coordinate contains Mysore location
+                const hasBadData = data.some(point => {
                     const [lat, lon] = point;
-                    return lat !== 0 && lon !== 0 && 
-                           lat !== 12.2958 && lon !== 76.6394 && // Mysore default
-                           Math.abs(lat) > 0.001 && Math.abs(lon) > 0.001 && // Not too close to 0,0
-                           lat >= -90 && lat <= 90 && 
-                           lon >= -180 && lon <= 180;
+                    return lat === 12.2958 && lon === 76.6394; // Mysore coordinates
                 });
                 
-                if (cleanData.length !== data.length) {
-                    // Only update if we removed bad data
-                    if (cleanData.length > 0) {
-                        saveRouteData(key, cleanData);
-                    } else {
-                        localStorage.removeItem(key);
-                    }
+                if (hasBadData) {
+                    foundBadData = true;
+                    break;
                 }
             }
         }
+    }
+    
+    // If we found any bad data, clear everything
+    if (foundBadData) {
+        console.log('Found Mysore coordinates in saved data - clearing everything');
+        clearAllRouteData();
     }
 }
 
