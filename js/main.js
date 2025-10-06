@@ -1,5 +1,5 @@
-// Set up the map
-const map = L.map('map').setView([12.2958, 76.6394], 13);
+// Set up the map (will be centered when GPS location is found)
+const map = L.map('map').setView([0, 0], 2); // Very zoomed out initially
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
@@ -23,11 +23,12 @@ function getRouteData(dateKey) {
     if (!savedData) return [];
     
     const data = JSON.parse(savedData);
-    // Filter out any default/invalid coordinates
+    // Filter out any default/invalid coordinates more strictly
     return data.filter(point => {
         const [lat, lon] = point;
         return lat !== 0 && lon !== 0 && 
-               lat !== 12.2958 && lon !== 76.6394 &&
+               lat !== 12.2958 && lon !== 76.6394 && // Mysore default
+               Math.abs(lat) > 0.001 && Math.abs(lon) > 0.001 && // Not too close to 0,0
                lat >= -90 && lat <= 90 && 
                lon >= -180 && lon <= 180;
     });
@@ -47,7 +48,12 @@ function getLastKnownLocation() {
     const today = getFormattedDate(0);
     const todayRoute = getRouteData(today);
     if (todayRoute.length > 0) {
-        return todayRoute[todayRoute.length - 1]; // Return last coordinate
+        const lastLocation = todayRoute[todayRoute.length - 1];
+        const [lat, lon] = lastLocation;
+        // Make sure it's not a default coordinate
+        if (lat !== 0 && lon !== 0 && lat !== 12.2958 && lon !== 76.6394) {
+            return lastLocation;
+        }
     }
     return null;
 }
@@ -149,7 +155,10 @@ function startTracking() {
             
             // Only add to route if we have a valid GPS location
             // Skip if this looks like a default/invalid location
-            if (lat !== 0 && lon !== 0 && lat !== 12.2958 && lon !== 76.6394) {
+            if (lat !== 0 && lon !== 0 && 
+                lat !== 12.2958 && lon !== 76.6394 && // Mysore default
+                Math.abs(lat) > 0.001 && Math.abs(lon) > 0.001) { // Not too close to 0,0
+                
                 currentRoute.push([lat, lon]);
                 
                 if (isFirstLocation) {
@@ -194,9 +203,10 @@ function getCurrentLocation() {
         const [lat, lon] = lastLocation;
         updateCurrentLocationMarker(lat, lon, 10);
         map.setView([lat, lon], 15);
+        return; // Exit early if we have last location
     }
     
-    // Then try to get current GPS location
+    // Only try GPS if we don't have a last location
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -208,10 +218,8 @@ function getCurrentLocation() {
             },
             (error) => {
                 console.log("Could not get current location:", error);
-                // If GPS fails and we don't have last location, stay at default
-                if (!lastLocation) {
-                    // Keep default map view
-                }
+                // If GPS fails and no last location, just show world map
+                // Don't set any marker or specific location
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
         );
@@ -233,18 +241,19 @@ function clearAllRouteData() {
 
 // Clean up any existing routes that might contain default coordinates
 function cleanupExistingRoutes() {
-    // Instead of clearing everything, let's clean the data properly
+    // Clean the data properly, removing all default coordinates
     for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (key && key.match(/^\d{4}-\d{2}-\d{2}$/)) { // Date format key
             const originalData = localStorage.getItem(key);
             if (originalData) {
                 const data = JSON.parse(originalData);
-                // Filter out bad coordinates
+                // Filter out bad coordinates more strictly
                 const cleanData = data.filter(point => {
                     const [lat, lon] = point;
                     return lat !== 0 && lon !== 0 && 
-                           lat !== 12.2958 && lon !== 76.6394 &&
+                           lat !== 12.2958 && lon !== 76.6394 && // Mysore default
+                           Math.abs(lat) > 0.001 && Math.abs(lon) > 0.001 && // Not too close to 0,0
                            lat >= -90 && lat <= 90 && 
                            lon >= -180 && lon <= 180;
                 });
