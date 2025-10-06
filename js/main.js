@@ -42,6 +42,16 @@ function clearRoutes() {
     polylineLayers = [];
 }
 
+// Get the last known location from today's route
+function getLastKnownLocation() {
+    const today = getFormattedDate(0);
+    const todayRoute = getRouteData(today);
+    if (todayRoute.length > 0) {
+        return todayRoute[todayRoute.length - 1]; // Return last coordinate
+    }
+    return null;
+}
+
 // Update current location marker
 function updateCurrentLocationMarker(lat, lon, accuracy = 10) {
     // Remove existing marker and circle
@@ -106,9 +116,12 @@ function drawAllRoutes() {
         }
     });
 
+    // If we have existing routes, fit the map to show them
     if (allPoints.length > 0) {
         map.fitBounds(L.latLngBounds(allPoints));
+        return true; // Return true if routes were drawn
     }
+    return false; // Return false if no routes exist
 }
 
 function startTracking() {
@@ -175,6 +188,15 @@ function stopTracking() {
 
 // Get current location for initial positioning
 function getCurrentLocation() {
+    // First, check if we have a last known location from today
+    const lastLocation = getLastKnownLocation();
+    if (lastLocation) {
+        const [lat, lon] = lastLocation;
+        updateCurrentLocationMarker(lat, lon, 10);
+        map.setView([lat, lon], 15);
+    }
+    
+    // Then try to get current GPS location
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -186,7 +208,10 @@ function getCurrentLocation() {
             },
             (error) => {
                 console.log("Could not get current location:", error);
-                // Fallback to default location if geolocation fails
+                // If GPS fails and we don't have last location, stay at default
+                if (!lastLocation) {
+                    // Keep default map view
+                }
             },
             { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
         );
@@ -208,8 +233,33 @@ function clearAllRouteData() {
 
 // Clean up any existing routes that might contain default coordinates
 function cleanupExistingRoutes() {
-    // For now, just clear everything to fix the line issue
-    clearAllRouteData();
+    // Instead of clearing everything, let's clean the data properly
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.match(/^\d{4}-\d{2}-\d{2}$/)) { // Date format key
+            const originalData = localStorage.getItem(key);
+            if (originalData) {
+                const data = JSON.parse(originalData);
+                // Filter out bad coordinates
+                const cleanData = data.filter(point => {
+                    const [lat, lon] = point;
+                    return lat !== 0 && lon !== 0 && 
+                           lat !== 12.2958 && lon !== 76.6394 &&
+                           lat >= -90 && lat <= 90 && 
+                           lon >= -180 && lon <= 180;
+                });
+                
+                if (cleanData.length !== data.length) {
+                    // Only update if we removed bad data
+                    if (cleanData.length > 0) {
+                        saveRouteData(key, cleanData);
+                    } else {
+                        localStorage.removeItem(key);
+                    }
+                }
+            }
+        }
+    }
 }
 
 // Function for the reset button
@@ -236,5 +286,14 @@ document.getElementById('routeSelect').addEventListener('change', drawAllRoutes)
 
 // Initial load: Clean existing data, get current location and draw routes
 cleanupExistingRoutes();
+
+// Draw existing routes first
+const hasExistingRoutes = drawAllRoutes();
+
+// Get current location (will show last known location if available)
 getCurrentLocation();
-drawAllRoutes();
+
+// If no existing routes, center on current location
+if (!hasExistingRoutes) {
+    // Will center on GPS or default location
+}
